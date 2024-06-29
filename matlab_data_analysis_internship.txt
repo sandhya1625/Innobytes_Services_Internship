@@ -1,0 +1,257 @@
+clc;
+clear;
+
+% Load the CSV file
+filename = 'D:/Sandhya/Internship_files/Sales Report.csv';
+opts = detectImportOptions(filename, 'Encoding', 'latin1');
+data = readtable(filename, opts);
+
+% Display the column names to verify
+disp('Column Names:');
+disp(data.Properties.VariableNames);
+
+% Display the first few rows of the data
+disp('First few rows of the dataset:');
+head(data);
+
+% Check for missing values
+disp('Summary of missing data:');
+missingData = sum(ismissing(data));
+disp(missingData);
+
+% Remove rows with missing 'Amount' values
+data = rmmissing(data, 'DataVariables', {'Amount'});
+
+% Convert necessary columns to categorical or datetime types
+data.Date = datetime(data.Date, 'InputFormat', 'MM-dd-yy');
+data.Status = categorical(data.Status);
+data.Category = categorical(data.Category);
+data.ship_city = categorical(data.ship_city);
+data.ship_state = categorical(data.ship_state);
+data.ship_country = categorical(data.ship_country);
+data.Fulfilment = categorical(data.Fulfilment);
+data.SalesChannel = categorical(data.SalesChannel);
+if ismember('Size', data.Properties.VariableNames)
+    data.Size = categorical(data.Size);
+end
+
+% Summary statistics for the 'Amount' column
+amountMean = mean(data.Amount);
+amountMedian = median(data.Amount);
+amountStd = std(data.Amount);
+amountMin = min(data.Amount);
+amountMax = max(data.Amount);
+
+% Display the statistics
+disp(['Mean: ', num2str(amountMean)]);
+disp(['Median: ', num2str(amountMedian)]);
+disp(['Standard Deviation: ', num2str(amountStd)]);
+disp(['Min: ', num2str(amountMin)]);
+disp(['Max: ', num2str(amountMax)]);
+
+% Plot total sales over time
+salesByDate = groupsummary(data, 'Date', 'sum', 'Amount');
+figure;
+plot(salesByDate.Date, salesByDate.sum_Amount, 'LineWidth', 2);
+xlabel('Date');
+ylabel('Total Sales (INR)');
+title('Total Sales Over Time');
+grid on;
+
+% Histogram of order amounts with x-axis limit
+figure;
+histogram(data.Amount, 'BinWidth', 100); % Adjust BinWidth as needed
+xlim([min(data.Amount) 2000]); % Set x-axis limit to 2000
+xlabel('Order Amount (INR)');
+ylabel('Frequency');
+title('Distribution of Order Amounts');
+grid on;
+
+% Pie chart of order status with percentages
+statusCounts = countcats(data.Status);
+statusLabels = categories(data.Status);
+statusPercentages = 100 * statusCounts / sum(statusCounts);
+
+figure;
+p = pie(statusCounts);
+
+% Adjust the text labels to be simple category names
+for i = 1:length(p)
+    if isprop(p(i), 'String')
+        p(i).String = '';  % Clear default text
+    end
+end
+
+% Create labels with percentages for the legend
+labelsWithPercentages = arrayfun(@(x) sprintf('%s: %.1f%%', statusLabels{x}, statusPercentages(x)), 1:length(statusLabels), 'UniformOutput', false);
+legend(labelsWithPercentages, 'Location', 'bestoutside');
+title('Order Status Distribution');
+
+% Manually create a contingency table for fulfillment type and delivery status
+fulfillmentCategories = categories(data.Fulfilment);
+statusCategories = categories(data.Status);
+
+fulfillmentStatusCounts = zeros(length(fulfillmentCategories), length(statusCategories));
+for i = 1:length(fulfillmentCategories)
+    for j = 1:length(statusCategories)
+        fulfillmentStatusCounts(i,j) = sum(data.Fulfilment == fulfillmentCategories{i} & data.Status == statusCategories{j});
+    end
+end
+
+% Plot heatmap
+figure;
+heatmap(statusCategories, fulfillmentCategories, fulfillmentStatusCounts);
+xlabel('Order Status');
+ylabel('Fulfillment Type');
+title('Fulfillment Type vs. Order Status');
+
+% Group by sales channel and calculate total sales
+salesByChannel = groupsummary(data, 'SalesChannel', 'sum', 'Amount');
+figure;
+bar(categorical(salesByChannel.SalesChannel), salesByChannel.sum_Amount);
+xlabel('Sales Channel');
+ylabel('Total Sales (INR)');
+title('Sales Channel Performance');
+
+% Plot distribution of orders over shipping states
+stateCounts = countcats(data.ship_state);
+stateLabels = categories(data.ship_state);
+
+% Create the main figure
+figure;
+
+% Create the bar plot
+subplot(1, 10, 1:8); % Main plot takes up 8/10 of the figure width
+b = bar(categorical(stateLabels), stateCounts);
+
+% Set the colormap to a color ramp (e.g., 'parula')
+colormap('parula'); % You can choose other colormaps like 'jet', 'hot', 'cool', etc.
+
+% Get the current colormap
+cmap = colormap;
+
+% Normalize the bar heights to the range of the colormap
+minCount = min(stateCounts);
+maxCount = max(stateCounts);
+normalizedCounts = (stateCounts - minCount) / (maxCount - minCount); % Normalize to [0, 1]
+colorIndices = round(normalizedCounts * (size(cmap, 1) - 1)) + 1; % Scale to colormap size
+
+% Apply the colors to the bars
+b.FaceColor = 'flat';
+for k = 1:length(stateCounts)
+    b.CData(k, :) = cmap(colorIndices(k), :);
+end
+
+% Add labels and title
+xlabel('Shipping State');
+ylabel('Number of Orders');
+title('Distribution of Orders Over Shipping States');
+
+% Ensure x-axis labels are displayed properly
+ax = gca;
+ax.XTickLabelRotation = 45; % Rotate x-axis labels if necessary
+ax.TickLabelInterpreter = 'none'; % Ensure labels are not interpreted as TeX
+
+% Create the color ramp subplot
+subplot(1, 10, 9:10); % Color ramp takes up 2/10 of the figure width
+
+% Create an image with the color ramp
+colorRampData = repmat((1:size(cmap, 1))', 1, 5); % Create a vertical gradient
+imagesc(colorRampData);
+colormap('parula');
+set(gca, 'YTick', linspace(1, size(cmap, 1), 5), 'YTickLabel', round(linspace(minCount, maxCount, 5)), 'XTick', []); % Set Y-ticks to show the range of counts
+ylabel('Number of Orders');
+
+% Adjust layout to prevent overlap
+set(gcf, 'Position', [100, 100, 1200, 600]); % Adjust figure size if needed
+
+% Plot category of orders with enhanced styling
+categoryCounts = countcats(data.Category);
+categoryLabels = categories(data.Category);
+figure;
+barh(categorical(categoryLabels), categoryCounts, 'FaceColor', [0.2, 0.6, 0.8]);
+xlabel('Number of Orders');
+ylabel('Category');
+title('Distribution of Orders by Category');
+grid on;
+set(gca, 'FontSize', 12);
+set(gca, 'YColor', [0.3, 0.3, 0.3]);
+set(gca, 'XColor', [0.3, 0.3, 0.3]);
+
+% Add text labels to the bars
+for i = 1:length(categoryCounts)
+    text(categoryCounts(i) + 5, i, num2str(categoryCounts(i)), 'VerticalAlignment', 'middle', 'FontSize', 10);
+end
+
+% Convert 'Date' to datetime if it's not already
+data.Date = datetime(data.Date, 'InputFormat', 'MM-dd-yy');
+
+% Extract month and year from Date
+data.Month = month(data.Date);
+
+% Group by month and calculate total sales
+salesByMonth = groupsummary(data, 'Month', 'sum', 'Amount');
+
+% Define month names for the pie chart labels
+months = {'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'};
+
+% Define custom colors for the pie chart slices
+colors = jet(length(months));
+
+% Initialize variables to store sales and labels for months with data
+salesWithData = [];
+labelsWithData = {};
+
+% Loop through all months and check if data exists
+for m = 1:length(months)
+    % Find the index of the month in salesByMonth
+    idx = find(salesByMonth.Month == m);
+    
+    if ~isempty(idx)
+        % If data exists for this month, add sales and label to the lists
+        salesWithData(end+1) = salesByMonth.sum_Amount(idx);
+        labelsWithData{end+1} = months{m};
+    end
+end
+
+% Create pie chart with custom colors
+figure;
+pie(salesWithData, labelsWithData);
+colormap(colors); % Apply custom colors
+title('Total Sales Distribution by Month');
+
+% Adjust the aspect ratio to make the pie chart circular
+daspect([1 1 1]);
+
+% Calculate percentages and create legend
+percentages = salesWithData / sum(salesWithData) * 100;
+legendLabels = cellstr(num2str(percentages', '%.1f%%'));
+legend(legendLabels, 'Location', 'bestoutside');
+
+% Enhance legend with month names
+for i = 1:length(labelsWithData)
+    legendLabels{i} = sprintf('%s: %s', labelsWithData{i}, legendLabels{i});
+end
+
+% Display legend with month names and percentages
+legend(legendLabels, 'Location', 'bestoutside');
+
+% Plot size distribution if the column exists
+if ismember('Size', data.Properties.VariableNames)
+    sizeCounts = countcats(data.Size);
+    sizeLabels = categories(data.Size);
+    figure;
+    bar(categorical(sizeLabels), sizeCounts, 'FaceColor', [0.7, 0.3, 0.6]);
+    xlabel('Size');
+    ylabel('Number of Orders');
+    title('Distribution of Orders by Size');
+    grid on;
+    set(gca, 'FontSize', 12);
+    set(gca, 'XColor', [0.3, 0.3, 0.3]);
+    set(gca, 'YColor', [0.3, 0.3, 0.3]);
+    
+    % Add text labels to the bars
+    for i = 1:length(sizeCounts)
+        text(i, sizeCounts(i) + 2, num2str(sizeCounts(i)), 'HorizontalAlignment', 'center', 'FontSize', 10);
+    end
+end
